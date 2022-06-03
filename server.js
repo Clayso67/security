@@ -1,39 +1,79 @@
-const express = require('express');//import the library
+const express = require('express');
 const port = 3000;
-const bodyParser = require('body-parser');//body-parder is called middleware
-const app = express();//use the library
+const https = require('https');
+const bodyParser = require('body-parser');
 const md5 = require('md5');
 const {createClient} = require('redis');
+const fs = require('fs');
+
+
 const redisClient = createClient(
-{
+    {
         socket:{
-            port:6379,
-            host:"127.0.0.1"
+            port: 6379,
+            host: '127.0.0.1'
         }
-}
+    }
 );
 
-app.use(bodyParser.json());//use the middleware (call it before anything else happens on each request)
-redisClient.connect();
 
-app.listen(port, async ()=>{
-    console.log("listening on port: " +port);
-})
-const validatePassword = async(request, response)=>{
+const app = express();
+app.use(bodyParser.json());
+
+
+
+
+https.createServer({
+    key: fs.readFileSync('server.key'),
+    cert: fs.readFileSync('server.cert'),
+    passphrase: 'p@ssw0rd'
+}, app).listen(port, async ()=>{
+    await redisClient.connect();
+    console.log("listening on port:"+port);
+});
+
+
+
+const validatePassword = async(req,res) => {
     
-    const requestHashedPassword = md5(request.body.password)
-    const redisHashedPassword = await redisClient.hGet('password',request.body.userName);
-    const loginRequest = request.body;
-    console.log('Request Body',JSON.stringify(request.body));
-    //search database for username and retrieve current password
-    //compare the hashed version of the password that was sent with the hashed version from the database
-    if (requestHashedPassword==redisHashedPassword){
-        response.status(200);
-        response.send("Welcome");
+    const reqHashedPassword = md5(req.body.password);
+    const redisHashedPassword = await redisClient.hGet('password',req.body.userName);
+    const loginRequest = req.body;
+    console.log('Request Body',JSON.stringify(req.body));
+    
+
+    
+
+    if (loginRequest.userName=="username@gmail.com" && reqHashedPassword == redisHashedPassword){
+        res.status(200);
+        res.send("Welcome");
     } else{
-        response.status(401);
-        response.send("Unauthorized");
+        res.status(401);
+        res.send("Unauthorized");
         }
 };
+
+
+
+const signup = async(req,res) =>{
+
+    const hashedNewPassword = md5(req.body.newPassword);
+    await redisClient.hSet('password', req.body.newUserName, hashedNewPassword);
+    res.status(200);
+    res.send({result:"Saved"});
+
+}
+
+
+
+
+app.get('/',(req,res)=>{
+    res.send("connected!")
+});
+
+
+
+
+app.post('/signup', signup);
 
 app.post('/login', validatePassword);
