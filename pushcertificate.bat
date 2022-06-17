@@ -1,0 +1,1 @@
+scp ./server.* clays@clayso.nodejs.270.com:/tmp
